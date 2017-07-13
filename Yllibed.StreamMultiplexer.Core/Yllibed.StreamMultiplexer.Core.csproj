@@ -2,6 +2,7 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>net46;netstandard1.4;uap10.0</TargetFrameworks>
+		<LangVersion>7.1</LangVersion>
 	</PropertyGroup>
 
 
@@ -15,6 +16,11 @@
 		<TargetFrameworkVersion>v5.0</TargetFrameworkVersion>
 		<DefineConstants>$(DefineConstants);NETFX_CORE;WINDOWS_UWP</DefineConstants>
 		<LanguageTargets>$(MSBuildExtensionsPath)\Microsoft\WindowsXaml\v$(VisualStudioVersion)\Microsoft.Windows.UI.Xaml.CSharp.targets</LanguageTargets>
+	</PropertyGroup>
+
+
+	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net46|AnyCPU'">
+	  <ErrorReport>prompt</ErrorReport>
 	</PropertyGroup>
 
 	<ItemGroup Condition=" '$(TargetFramework)' == 'uap10.0' ">

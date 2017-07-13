@@ -198,6 +198,9 @@ The max length of the name is limited to the packet size. **The maximum length i
 UTF-8 characters**. As a precaution, the name length is limited 1024 characters (latin-equivalent).
 If you need to deal with non-latin character sets, do your maths :-).
 
+Zero length names are valid too on this protocol. It's up to the other peer to decide if
+the stream request is valid or not.
+
 > The way the Stream names has been designed is to use them as service names. Use them as
 > _port number_ in _TCP/IP_ or `WebSocket-Protocol` in the _WebSocket_ stream negociation.
 

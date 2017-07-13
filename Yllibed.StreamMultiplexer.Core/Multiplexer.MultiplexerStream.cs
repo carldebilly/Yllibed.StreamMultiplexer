@@ -89,7 +89,7 @@ namespace Yllibed.StreamMultiplexer.Core
 							return writtenBytes;
 						}
 
-						var availableInReadingBuffer = _readingBufferPointer - (_readingBuffer?.Length ?? 0);
+						var availableInReadingBuffer = (_readingBuffer?.Length ?? 0) - _readingBufferPointer;
 						if (availableInReadingBuffer <= 0)
 						{
 							if (!await DequeueReceivedBuffer(ct, waitForBuffer: writtenBytes == 0))
@@ -235,7 +235,7 @@ namespace Yllibed.StreamMultiplexer.Core
 						}
 
 						remainingSendingBufferSpace = (ushort)(PacketPayloadSize - _sendingBufferPointer);
-						if (remainingSendingBufferSpace > count)
+						if (remainingSendingBufferSpace < count)
 						{
 							Array.Copy(buffer, bufferPointer, _sendingBuffer, _sendingBufferPointer, remainingSendingBufferSpace);
 							bufferPointer += remainingSendingBufferSpace;

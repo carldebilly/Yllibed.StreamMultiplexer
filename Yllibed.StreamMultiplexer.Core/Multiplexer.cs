@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -76,7 +77,7 @@ namespace Yllibed.StreamMultiplexer.Core
 				while (!ct.IsCancellationRequested)
 				{
 					var requests = _requests;
-					var streamId = (ushort) (requests.Keys.Concat(_streams.Keys).Max() + 1);
+					var streamId = GetNextStreamId();
 					var tcs = new TaskCompletionSource<(MultiplexerPacketType result, ushort data)>();
 					var updatedRequests = requests.SetItem(streamId, tcs);
 					if (Interlocked.CompareExchange(ref _requests, updatedRequests, requests) != requests)
@@ -116,6 +117,7 @@ namespace Yllibed.StreamMultiplexer.Core
 					{
 						stream = null;
 					}
+					break;
 				}
 			}
 			finally
@@ -129,16 +131,26 @@ namespace Yllibed.StreamMultiplexer.Core
 			return stream;
 		}
 
+		private ushort GetNextStreamId()
+		{
+			if (_requests.IsEmpty && _streams.IsEmpty)
+			{
+				return 1;
+			}
+			return (ushort) (_requests.Keys.Concat(_streams.Keys).Max() + 1);
+		}
+
 		public ushort NumberOfActiveStreams => (ushort)_streams.Count;
 
 		private ImmutableDictionary<ushort, TaskCompletionSource<(MultiplexerPacketType result, ushort data)>> _requests
 			= ImmutableDictionary<ushort, TaskCompletionSource<(MultiplexerPacketType result, ushort data)>>.Empty;
 
+		private bool _initialized = false;
 
 		private void ReadStartingBlock()
 		{
 			// Send starting block to other side
-			_lowLevelStream.Write(_ackBytes, 0, _ackBytes.Length);
+			var t1 = _lowLevelStream.WriteAsync(_ackBytes, 0, _ackBytes.Length, _ct);
 
 			// Read incoming starting block
 			foreach (var expected in _ackBytes)
@@ -151,6 +163,9 @@ namespace Yllibed.StreamMultiplexer.Core
 				}
 			}
 
+			t1.Wait(_ct);
+			_lowLevelStream.WriteByte(0x01);
+
 			var version = _lowLevelStream.ReadByte();
 			if (version != 1)
 			{
@@ -158,6 +173,7 @@ namespace Yllibed.StreamMultiplexer.Core
 				return;
 			}
 
+			_initialized = true;
 #pragma warning disable 4014
 			ProcessLowLevelInbound(); // start async process
 #pragma warning restore 4014
@@ -182,16 +198,16 @@ namespace Yllibed.StreamMultiplexer.Core
 				// Process any received packet
 				while (bufferPointer >= 8)
 				{
-					var payloadLength = BitConverter.ToUInt16(buffer, 7);
+					var payloadLength = BitConverter.ToUInt16(buffer, 4);
 					var packetLength = (ushort) (payloadLength + 6);
 					if (packetLength > 1440)
 					{
 						await SendERR(0, MultiplexerErrorCode.ERR_PACKET_TOO_LONG);
 					}
 
-					if (bufferPointer <= packetLength)
+					if (bufferPointer < packetLength)
 					{
-						break;
+						break; // this packet is incompleted, waiting for the remaining... (this should not happen often, except on low MTU networks)
 					}
 
 					var packetBytes = new byte[packetLength];
@@ -226,14 +242,14 @@ namespace Yllibed.StreamMultiplexer.Core
 					}
 					else
 					{
-						if (payloadLength < 16)
+						if (payloadLength < 2)
 						{
 							await SendERR(0, MultiplexerErrorCode.ERR_PACKET_TOO_SHORT);
 						}
 						else
 						{
-							var remoteWindowSize = BitConverter.ToUInt16(packetBytes, 7);
-							var name = _Utf8.GetString(packetBytes, 9, payloadLength - 9);
+							var remoteWindowSize = BitConverter.ToUInt16(packetBytes, 6);
+							var name = _Utf8.GetString(packetBytes, 8, payloadLength - 2);
 
 							var args = new StreamRequestEventArgs(name, () => CreateStream(streamId, remoteWindowSize));
 							RequestedStream?.Invoke(this, args);
@@ -245,7 +261,7 @@ namespace Yllibed.StreamMultiplexer.Core
 				case MultiplexerPacketType.ACK:
 					if (_requests.TryGetValue(streamId, out var requestForAck))
 					{
-						var remoteWindowSize = BitConverter.ToUInt16(packetBytes, 7);
+						var remoteWindowSize = BitConverter.ToUInt16(packetBytes, 6);
 						requestForAck.TrySetResult((packetType, remoteWindowSize));
 					}
 					break;
@@ -260,7 +276,7 @@ namespace Yllibed.StreamMultiplexer.Core
 				case MultiplexerPacketType.COL:
 					if (_requests.TryGetValue(streamId, out var requestForCol))
 					{
-						var suggestedId = BitConverter.ToUInt16(packetBytes, 7);
+						var suggestedId = BitConverter.ToUInt16(packetBytes, 6);
 						requestForCol.TrySetResult((packetType, suggestedId));
 					}
 					break;
@@ -270,7 +286,7 @@ namespace Yllibed.StreamMultiplexer.Core
 					{
 						var dataLength = payloadLength - 4;
 						var data = new byte [dataLength];
-						Array.Copy(packetBytes, 7, data, 0, dataLength);
+						Array.Copy(packetBytes, 6, data, 0, dataLength);
 						streamData.OnReceivedBuffer(data);
 
 						// TODO: check CRC
@@ -324,6 +340,11 @@ namespace Yllibed.StreamMultiplexer.Core
 
 		private async Task SendPacket(ushort streamId, MultiplexerPacketType packetType, params IEnumerable<byte>[] payloads)
 		{
+			while (!_initialized)
+			{
+				await Task.Delay(10, _ct);
+			}
+
 			byte[] payload =
 				payloads.Length == 0
 					? null
@@ -331,7 +352,9 @@ namespace Yllibed.StreamMultiplexer.Core
 						? payloads[0].ToArray()
 						: payloads.SelectMany(x => x).ToArray();
 
-			_lowLevelStream.Write(BitConverter.GetBytes(streamId), 0, 2); // 0-1
+			// TODO: memory-mapped struct instead of this, to prevent fragmentation on network
+			var streamIdBytes = BitConverter.GetBytes(streamId);
+			_lowLevelStream.Write(streamIdBytes, 0, 2); // 0-1
 			_lowLevelStream.WriteByte((byte) packetType); // 2
 			_lowLevelStream.WriteByte(0x00); // 3
 			var packetLength = (ushort) (payload?.Length ?? 0);
@@ -370,7 +393,7 @@ namespace Yllibed.StreamMultiplexer.Core
 
 		private Task SendCOL(ushort streamId)
 		{
-			var suggestedId = (ushort) (_streams.Keys.Max() + 1);
+			var suggestedId = GetNextStreamId();
 
 			return SendPacket(streamId, MultiplexerPacketType.COL, BitConverter.GetBytes(suggestedId));
 		}
