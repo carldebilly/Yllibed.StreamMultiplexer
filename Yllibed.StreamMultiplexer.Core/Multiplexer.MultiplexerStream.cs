@@ -86,6 +86,12 @@ namespace Yllibed.StreamMultiplexer.Core
 					{
 						if (count <= 0 && writtenBytes > 0)
 						{
+							if (_readingBufferPointer == _readingBuffer.Length)
+							{
+								// We're finish with current buffer: dequeue next immediatly & send DACK
+								await DequeueReceivedBuffer(ct, waitForBuffer: false);
+							}
+
 							return writtenBytes;
 						}
 
@@ -139,6 +145,7 @@ namespace Yllibed.StreamMultiplexer.Core
 
 						// wait for something to arrive on this stream
 						await _receivedData.WaitAsync(ct);
+						_receivedData.Reset();
 
 						// restart this loop
 						continue;
@@ -316,10 +323,13 @@ namespace Yllibed.StreamMultiplexer.Core
 				if (!_isClosed)
 				{
 					_isClosed = true;
-					_owner.SendFIN(_streamId, MultiplexerTerminationType.NORMAL);
-				}
 
-				_receivedData.Set();
+					// Send closing stream to other peer
+					_owner.SendFIN(_streamId, MultiplexerTerminationType.NORMAL);
+
+					// unblock any waiting .Read() operation
+					_receivedData.Set();
+				}
 
 				// Remove the streams of the multiplexer list
 				while (true)

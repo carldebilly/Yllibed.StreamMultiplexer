@@ -14,10 +14,15 @@ namespace Yllibed.StreamMultiplexer.Core
 	/// </remarks>
 	internal class ManualResetEventSlim
 	{
+		private readonly TaskFactory _taskFactory;
+
 		private TaskCompletionSource<object> _tcs;
 
-		internal ManualResetEventSlim(bool initialState)
+		internal ManualResetEventSlim(bool initialState, TaskScheduler scheduler = null)
 		{
+			var scheduler1 = scheduler ?? TaskScheduler.Current ?? TaskScheduler.Default;
+			_taskFactory = new TaskFactory(scheduler1);
+
 			if (initialState)
 			{
 				Set();
@@ -50,7 +55,7 @@ namespace Yllibed.StreamMultiplexer.Core
 
 		public void Set()
 		{
-			GetTcs().TrySetResult(null);
+			_taskFactory.StartNew(() => GetTcs().TrySetResult(null));
 		}
 
 		public Task WaitAsync(CancellationToken ct)

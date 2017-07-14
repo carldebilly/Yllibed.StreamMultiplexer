@@ -68,6 +68,13 @@ namespace Yllibed.StreamMultiplexer.Tests
 			var readFromA = await readATask;
 			readFromA.ShouldBeEquivalentTo(10);
 			bufferA.ShouldAllBeEquivalentTo(bufferB);
+
+			subStreamB.Dispose();
+			multiplexerB.NumberOfActiveStreams.ShouldBeEquivalentTo(0);
+
+			subStreamA.ReadByte().ShouldBeEquivalentTo(-1);
+			multiplexerA.NumberOfActiveStreams.ShouldBeEquivalentTo(0);
+
 		}
 
 		private async Task<(NetworkStream streamA, NetworkStream streamB)> GetStreamsPair()

@@ -1,13 +1,18 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26621.2
+VisualStudioVersion = 15.0.26711.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Yllibed.StreamMultiplexer.Core", "Yllibed.StreamMultiplexer.Core\Yllibed.StreamMultiplexer.Core.csproj", "{2A2070CD-8EA0-40E5-B9FB-A2DC5A4EAB4A}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Yllibed.StreamMultiplexer.Tests", "Yllibed.StreamMultiplexer.Tests\Yllibed.StreamMultiplexer.Tests.csproj", "{9CE7939A-DCA9-4BC0-96BC-07DBD7FCE95F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Yllibed.TestStream", "Yllibed.TestStream\Yllibed.TestStream.csproj", "{0846831C-CD5B-4BA5-9F00-89ABD223C52C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Yllibed.TestStream", "Yllibed.TestStream\Yllibed.TestStream.csproj", "{0846831C-CD5B-4BA5-9F00-89ABD223C52C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{92ED3D56-2434-4D36-B21F-A641289285CE}"
+	ProjectSection(SolutionItems) = preProject
+		README.md = README.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

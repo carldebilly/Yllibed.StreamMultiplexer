@@ -102,6 +102,11 @@ Here some parts not covered by this protocol:
   * **DOS protection**: There is no mecanism to prevent DOS-type attack on this protocol. Should be managed on the
     _low-level stream_.
 
+## Important about sub-Streams
+ * Sub-streams are of type `MultiplexerStream`, a nested type to `Multiplexer`.
+ * Sub-streams are buffered: **it means data they won't be sent until the buffer is full or until you
+   explicitely flush it**.
+
 # Low-Level Stream Protocol - UNDER THE HOOD
  1. The first bytes (`ackBytes`) are sent by both peers.
     * If the bytes are not recognized by both peers, the stream is closed.
@@ -291,6 +296,7 @@ This project contains an implementation using C#/.NET.
 
 ## Potential Future Improvements / ambitions
 * Support for dynamic window instead of relying on static window size.
+* Implement a kind of priority on substreams.
 * Ability to send unsollicited OOB (Out-Of-Band) packets to other peer on a stream.
 * Ability to "ask" to other peer a list of available streams to connect to.
 * Variable packet size based on a packet size discovery mecanism.

@@ -184,43 +184,51 @@ namespace Yllibed.StreamMultiplexer.Core
 			var buffer = new byte[_bufferSize];
 			ushort bufferPointer = 0;
 
-			while (!_ct.IsCancellationRequested)
+			try
 			{
-				var readBytes = await _lowLevelStream.ReadAsync(buffer, bufferPointer, _bufferSize - bufferPointer, _ct);
-				if (readBytes == 0)
+				while (!_ct.IsCancellationRequested)
 				{
-					// End of stream
-					return;
-				}
-
-				bufferPointer += (ushort) readBytes;
-
-				// Process any received packet
-				while (bufferPointer >= 8)
-				{
-					var payloadLength = BitConverter.ToUInt16(buffer, 4);
-					var packetLength = (ushort) (payloadLength + 6);
-					if (packetLength > 1440)
+					var readBytes = await _lowLevelStream.ReadAsync(buffer, bufferPointer, _bufferSize - bufferPointer, _ct);
+					if (readBytes == 0)
 					{
-						await SendERR(0, MultiplexerErrorCode.ERR_PACKET_TOO_LONG);
+						// End of stream
+						return;
 					}
 
-					if (bufferPointer < packetLength)
+					bufferPointer += (ushort) readBytes;
+
+					// Process any received packet
+					while (bufferPointer >= 6)
 					{
-						break; // this packet is incompleted, waiting for the remaining... (this should not happen often, except on low MTU networks)
+						var payloadLength = BitConverter.ToUInt16(buffer, 4);
+						var packetLength = (ushort) (payloadLength + 6);
+						if (packetLength > 1440)
+						{
+							await SendERR(0, MultiplexerErrorCode.ERR_PACKET_TOO_LONG);
+						}
+
+						if (bufferPointer < packetLength)
+						{
+							break; // this packet is incompleted, waiting for the remaining... (this should not happen often, except on low MTU networks)
+						}
+
+						var packetBytes = new byte[packetLength];
+
+						// Copy buffer into new bytes for this packet
+						Array.Copy(buffer, 0, packetBytes, 0, packetLength);
+
+						// Move remaining of packet at beginning of the pointer & readjust pointer
+						Array.Copy(buffer, packetLength, buffer, 0, bufferPointer - packetLength);
+						bufferPointer -= packetLength;
+
+						await ProcessIncomingPacket(packetBytes);
 					}
-
-					var packetBytes = new byte[packetLength];
-
-					// Copy buffer into new bytes for this packet
-					Array.Copy(buffer, 0, packetBytes, 0, packetLength);
-
-					// Move remaining of packet at beginning of the pointer & readjust pointer
-					Array.Copy(buffer, packetLength, buffer, 0, bufferPointer - packetLength);
-					bufferPointer -= packetLength;
-
-					await ProcessIncomingPacket(packetBytes);
 				}
+			}
+			catch
+			{
+				Dispose();
+				throw;
 			}
 		}
 
