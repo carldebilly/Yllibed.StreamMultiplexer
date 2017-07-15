@@ -295,6 +295,7 @@ This project contains an implementation using C#/.NET.
 > Other implementations are welcome.
 
 ## Potential Future Improvements / ambitions
+* Performance enhancements: Less CPU, less memory-copying, more throughtput.
 * Support for dynamic window instead of relying on static window size.
 * Implement a kind of priority on substreams.
 * Ability to send unsollicited OOB (Out-Of-Band) packets to other peer on a stream.

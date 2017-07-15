@@ -71,20 +71,20 @@ namespace Yllibed.StreamMultiplexer.Core
 				{
 					throw new ArgumentOutOfRangeException(nameof(offset));
 				}
-				if (count < 0)
+				if (count <= 0)
 				{
 					throw new ArgumentOutOfRangeException(nameof(count));
 				}
 
 				await _readingSemaphore.WaitAsync(ct); // Operates the reading operations under an exclusive concurrency
 
-				var writtenBytes = 0;
+				var readBytes = 0;
 
 				try
 				{
 					while (true)
 					{
-						if (count <= 0 && writtenBytes > 0)
+						if (count <= 0 && readBytes > 0)
 						{
 							if (_readingBufferPointer == _readingBuffer.Length)
 							{
@@ -92,15 +92,15 @@ namespace Yllibed.StreamMultiplexer.Core
 								await DequeueReceivedBuffer(ct, waitForBuffer: false);
 							}
 
-							return writtenBytes;
+							return readBytes;
 						}
 
 						var availableInReadingBuffer = (_readingBuffer?.Length ?? 0) - _readingBufferPointer;
 						if (availableInReadingBuffer <= 0)
 						{
-							if (!await DequeueReceivedBuffer(ct, waitForBuffer: writtenBytes == 0))
+							if (!await DequeueReceivedBuffer(ct, waitForBuffer: readBytes == 0))
 							{
-								return writtenBytes; // Requester got something or 0 if stream is closed
+								return readBytes; // Requester got something or 0 if stream is closed
 							}
 							continue;
 						}
@@ -113,7 +113,7 @@ namespace Yllibed.StreamMultiplexer.Core
 						Array.Copy(_readingBuffer, _readingBufferPointer, buffer, offset, bytesToCopy);
 
 						// Increment the count of copied bytes
-						writtenBytes += bytesToCopy;
+						readBytes += bytesToCopy;
 						// Advance the reading pointer
 						_readingBufferPointer += (ushort)bytesToCopy;
 						// Reduce count for next read (if any)
@@ -130,7 +130,7 @@ namespace Yllibed.StreamMultiplexer.Core
 
 			private async Task<bool> DequeueReceivedBuffer(CancellationToken ct, bool waitForBuffer)
 			{
-				while (!(ct.IsCancellationRequested || _isClosed))
+				while (!ct.IsCancellationRequested)
 				{
 					var capture = _receivedBuffers;
 
@@ -138,7 +138,7 @@ namespace Yllibed.StreamMultiplexer.Core
 					{
 						// nothing yet available ?
 
-						if (!waitForBuffer)
+						if (!waitForBuffer || _isClosed)
 						{
 							break;
 						}
@@ -228,20 +228,20 @@ namespace Yllibed.StreamMultiplexer.Core
 						throw new ArgumentOutOfRangeException(nameof(count));
 					}
 
-					while (bufferPointer < endPointer)
+					while (bufferPointer < endPointer && !ct.IsCancellationRequested)
 					{
 						// Copy buffer to sending packet
 						var remainingSendingBufferSpace = (ushort)(PacketPayloadSize - _sendingBufferPointer);
 						if (remainingSendingBufferSpace == 0)
 						{
 							await FlushAsyncInternal(ct);
+							continue; // recalculate remainingSendingBufferSpace
 						}
 						if (count <= 0)
 						{
 							break; // finished sending the buffer
 						}
 
-						remainingSendingBufferSpace = (ushort)(PacketPayloadSize - _sendingBufferPointer);
 						if (remainingSendingBufferSpace < count)
 						{
 							Array.Copy(buffer, bufferPointer, _sendingBuffer, _sendingBufferPointer, remainingSendingBufferSpace);
@@ -309,6 +309,7 @@ namespace Yllibed.StreamMultiplexer.Core
 			public override bool CanSeek { get; } = false;
 			public override bool CanWrite { get; } = true;
 			public override long Length => throw new InvalidOperationException();
+			public bool DataAvailable => _readingBufferPointer < (_readingBuffer?.Length ?? 0) || !_receivedBuffers.IsEmpty;
 
 			public override long Position
 			{
@@ -322,6 +323,8 @@ namespace Yllibed.StreamMultiplexer.Core
 
 				if (!_isClosed)
 				{
+					Flush();
+
 					_isClosed = true;
 
 					// Send closing stream to other peer

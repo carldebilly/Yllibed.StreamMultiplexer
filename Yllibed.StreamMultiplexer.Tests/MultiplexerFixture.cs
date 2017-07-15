@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -22,37 +26,20 @@ namespace Yllibed.StreamMultiplexer.Tests
 		{
 			_cts = Debugger.IsAttached
 				? new CancellationTokenSource()
-				: new CancellationTokenSource(5000);
+				: new CancellationTokenSource(TimeSpan.FromSeconds(25));
 			_ct = _cts.Token;
 		}
 
 		[TestCleanup]
 		public void Teardown()
 		{
-			_cts.Cancel();
+			_cts.Dispose();
 		}
 
 		[TestMethod]
 		public async Task MultiplexerSanityTest()
 		{
-			(var streamA, var streamB) = await GetStreamsPair();
-
-			var multiplexerA = new Multiplexer(streamA);
-			var multiplexerB = new Multiplexer(streamB);
-
-			Stream subStreamA = null;
-			multiplexerA.RequestedStream += (snd, evt) => { evt.GetStream(out subStreamA); };
-
-			multiplexerA.Start();
-			multiplexerB.Start();
-
-			var subStreamB = await multiplexerB.RequestStream(_ct, "channel");
-
-			multiplexerA.NumberOfActiveStreams.ShouldBeEquivalentTo(1);
-			multiplexerB.NumberOfActiveStreams.ShouldBeEquivalentTo(1);
-
-			subStreamA.Should().NotBeNull();
-			subStreamB.Should().NotBeNull();
+			(_, _, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
 
 			var bufferA = new byte[10];
 			var bufferB = new byte[10];
@@ -74,9 +61,204 @@ namespace Yllibed.StreamMultiplexer.Tests
 
 			subStreamA.ReadByte().ShouldBeEquivalentTo(-1);
 			multiplexerA.NumberOfActiveStreams.ShouldBeEquivalentTo(0);
-
 		}
 
+		[TestMethod]
+		public async Task MultiplexerTestMultipleStreams()
+		{
+			(var streamA, var streamB, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
+
+			var aStreams = ImmutableDictionary<string, Stream>.Empty;
+			var bStreams = ImmutableDictionary<string, Stream>.Empty;
+
+			multiplexerA.RequestedStream +=
+				(snd, evt) =>
+				{
+					if (evt.GetStream(out var stream))
+					{
+						Transactional.SetItem(ref aStreams, evt.Name, stream);
+					}
+				};
+
+			const int nbrStreams = 1000;
+
+			for (var i = 0; i < nbrStreams; i++)
+			{
+				var name = "stream" + i;
+				while (true)
+				{
+					var s = await multiplexerB.RequestStream(_ct, name);
+					if (s != null)
+					{
+						Transactional.SetItem(ref bStreams, name, s);
+						break;
+					}
+				}
+			}
+
+			aStreams.Should().HaveCount(nbrStreams);
+			bStreams.Should().HaveCount(nbrStreams);
+
+			foreach(var aStream in aStreams)
+			{
+				var stream = aStream.Value;
+				var bytes = Encoding.UTF32.GetBytes(aStream.Key);
+				await stream.WriteAsync(bytes, 0, bytes.Length, _ct);
+				await stream.FlushAsync(_ct);
+			}
+
+			var readBuffer = new byte[50];
+			foreach (var bStream in bStreams)
+			{
+				var stream = bStream.Value;
+				var expectedBytes = Encoding.UTF32.GetBytes(bStream.Key);
+				var read = await stream.ReadAsync(readBuffer, 0, 50, _ct);
+				read.Should().Be(expectedBytes.Length);
+				readBuffer.Take(read).SequenceEqual(expectedBytes).Should().BeTrue(bStream.Key);
+			}
+		}
+
+		[TestMethod]
+		public async Task TestStreamWindowSize()
+		{
+			(var streamA, var streamB, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
+
+			subStreamB.WriteByte(1);
+			await subStreamB.FlushAsync(_ct); // available window size reduced to 1
+
+			subStreamB.WriteByte(2);
+			await subStreamB.FlushAsync(_ct); // available window size reduced to 0
+
+			subStreamB.WriteByte(2);
+			var t = subStreamB.FlushAsync(_ct); // should be blocked until something is read from subStreamA
+
+			await Task.Delay(120, _ct); // give time for connection to do something
+			t.IsCompleted.Should().BeFalse();
+
+			// reading in subStreamA should unblock it
+			var buffer = new byte[10];
+			await subStreamA.ReadAsync(buffer, 0, 10, _ct);
+
+			await Task.Delay(120, _ct); // give time for connection to do something
+			t.IsCompleted.Should().BeTrue();
+		}
+
+		[TestMethod]
+		public async Task TestTransmitBigStream()
+		{
+			(var streamA, var streamB, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
+
+			var bigStream = new MemoryStream();
+
+			const int length = 1 * 1024 * 1024; // 1MB
+
+			long sum = 0;
+			for(var i = 0;i < length; i++)
+			{
+				byte b = (byte) (i % 256);
+				bigStream.WriteByte(b);
+				sum += b;
+			}
+			bigStream.Position = 0;
+
+			// Launch copy
+			var copyTask = bigStream.CopyToAsync(subStreamA, 2048, _ct).ContinueWith(_ => subStreamA.Dispose(), _ct);
+
+			long readSum = 0;
+			var buffer = new byte[64];
+			while (true)
+			{
+				var read = await subStreamB.ReadAsync(buffer, 0, 64, _ct);
+				if (read == 0)
+				{
+					break; // this should not happend until the reading buffer is cleared
+				}
+				var s = buffer.Take(read).Sum(x=>x);
+				readSum += s;
+				await Task.Yield();
+			}
+
+			readSum.Should().Be(sum);
+		}
+
+		[TestMethod]
+		public async Task TestTransmitAndClose()
+		{
+			(var streamA, var streamB, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
+
+			async Task WriteToStream()
+			{
+				await Task.Yield(); // run the remaining asynchrounously
+
+				for (byte i = 0; i < 10; i++)
+				{
+					var wbuffer = Enumerable.Repeat(i, i + 1).ToArray();
+					await subStreamB.WriteAsync(wbuffer, 0, wbuffer.Length, _ct);
+					await subStreamB.FlushAsync(_ct);
+				}
+
+				subStreamB.Close();
+			}
+
+			// Launch writing
+			var writeTask = WriteToStream();
+
+			for (byte j = 0; j < 10; j++)
+			{
+				await Task.Delay(5, _ct);
+
+				var buffer = new byte[j + 1];
+				var read = await subStreamA.ReadAsync(buffer, 0, buffer.Length, _ct);
+				read.ShouldBeEquivalentTo(buffer.Length);
+				buffer.ShouldAllBeEquivalentTo(j);
+			}
+
+			writeTask.IsCompleted.Should().BeTrue();
+
+			var b = new byte[1];
+			var r = await subStreamA.ReadAsync(b, 0, 1, _ct);
+			r.ShouldBeEquivalentTo(0);
+		}
+
+		[TestMethod]
+		public async Task TestTransmitWithoutFlushingAndClose()
+		{
+			(var streamA, var streamB, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
+
+			async Task WriteToStream()
+			{
+				await Task.Yield(); // run the remaining asynchrounously
+
+				for (byte i = 0; i < 10; i++)
+				{
+					var wbuffer = Enumerable.Repeat(i, i + 1).ToArray();
+					await subStreamB.WriteAsync(wbuffer, 0, wbuffer.Length, _ct);
+				}
+
+				subStreamB.Close();
+			}
+
+			// Launch writing
+			var writeTask = WriteToStream();
+
+			for (byte j = 0; j < 10; j++)
+			{
+				await Task.Delay(5, _ct);
+
+				var buffer = new byte[j + 1];
+				var read = await subStreamA.ReadAsync(buffer, 0, buffer.Length, _ct);
+				read.ShouldBeEquivalentTo(buffer.Length);
+				buffer.ShouldAllBeEquivalentTo(j);
+			}
+
+			writeTask.IsCompleted.Should().BeTrue();
+
+			var b = new byte[1];
+			var r = await subStreamA.ReadAsync(b, 0, 1, _ct);
+			r.ShouldBeEquivalentTo(0);
+		}
+
+		// *** PRIVATE STUFF ***
 		private async Task<(NetworkStream streamA, NetworkStream streamB)> GetStreamsPair()
 		{
 			var tcpServer = new TcpListener(IPAddress.IPv6Loopback, 0);
@@ -94,6 +276,42 @@ namespace Yllibed.StreamMultiplexer.Tests
 			clientB.Connected.Should().BeTrue("B not connected.");
 
 			return (clientA.GetStream(), clientB.GetStream());
+		}
+
+		private async Task<(NetworkStream streamA, NetworkStream streamB, Multiplexer multiplexerA, Multiplexer multiplexerB, Multiplexer.MultiplexerStream subStreamA, Multiplexer.MultiplexerStream subStreamB)> GetSubStreamsPair()
+		{
+			(var streamA, var streamB) = await GetStreamsPair();
+
+			var multiplexerA = new Multiplexer(streamA, windowSize: 2);
+			var multiplexerB = new Multiplexer(streamB, windowSize: 8);
+
+			Multiplexer.MultiplexerStream subStreamA = null;
+
+			void OnRequestedStream(object snd, StreamRequestEventArgs evt)
+			{
+				if (evt.Name == "channel1")
+				{
+					if (evt.GetStream(out var s))
+					{
+						subStreamA = s as Multiplexer.MultiplexerStream;
+					}
+				}
+			}
+
+			multiplexerA.RequestedStream += OnRequestedStream;
+
+			multiplexerA.Start();
+			multiplexerB.Start();
+
+			var subStreamB = await multiplexerB.RequestStream(_ct, "channel1") as Multiplexer.MultiplexerStream;
+
+			multiplexerA.NumberOfActiveStreams.ShouldBeEquivalentTo(1);
+			multiplexerB.NumberOfActiveStreams.ShouldBeEquivalentTo(1);
+
+			subStreamA.Should().NotBeNull();
+			subStreamB.Should().NotBeNull();
+
+			return (streamA, streamB, multiplexerA, multiplexerB, subStreamA, subStreamB);
 		}
 	}
 }

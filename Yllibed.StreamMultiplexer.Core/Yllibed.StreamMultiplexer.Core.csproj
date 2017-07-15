@@ -2,7 +2,19 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>net46;netstandard1.4;uap10.0</TargetFrameworks>
-		<LangVersion>7.1</LangVersion>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+		<RepositoryUrl>https://github.com/carldebilly/Yllibed.StreamMultiplexer</RepositoryUrl>
+		<RepositoryType>github</RepositoryType>
+		<PackageTags>stream</PackageTags>
+		<Authors>Carl de Billy</Authors>
+		<Company />
+		<Product>Yllibed Stream Multiplexer</Product>
+		<Description>
+			Implementation of the Yllibed Multiplexed Encapsulated Streaming Protocol (YMESP),
+			a proprietary protocol designed to tunnel substreams into a main one. It is optimized
+			to transit on TCP "NetworkStream", but any stream should work.
+		</Description>
 	</PropertyGroup>
 
 

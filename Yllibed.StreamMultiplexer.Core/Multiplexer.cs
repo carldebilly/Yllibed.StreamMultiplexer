@@ -88,30 +88,14 @@ namespace Yllibed.StreamMultiplexer.Core
 					await SendREQ(streamId, _windowSize, name);
 					(var result, var resultData) = await tcs.Task;
 
-					while (true)
-					{
-						var capture = _requests;
-						var updated = capture.Remove(streamId);
-						if (Interlocked.CompareExchange(ref _requests, updated, capture) == capture)
-						{
-							break;
-						}
-					}
+					Transactional.Remove(ref _requests, streamId);
 
 					if (result == MultiplexerPacketType.ACK)
 					{
 						stream = new MultiplexerStream(this, streamId, resultData);
 
 						// Register the new stream into
-						while (!ct.IsCancellationRequested)
-						{
-							var captureStreams = _streams;
-							var updatedStreams = captureStreams.SetItem(streamId, stream);
-							if (Interlocked.CompareExchange(ref _streams, updatedStreams, captureStreams) == captureStreams)
-							{
-								break;
-							}
-						}
+						Transactional.SetItem(ref _streams, streamId, stream);
 					}
 					else if (result == MultiplexerPacketType.NAK)
 					{
@@ -225,10 +209,9 @@ namespace Yllibed.StreamMultiplexer.Core
 					}
 				}
 			}
-			catch
+			finally
 			{
 				Dispose();
-				throw;
 			}
 		}
 
@@ -333,6 +316,7 @@ namespace Yllibed.StreamMultiplexer.Core
 				var capture = _streams;
 				if (capture.ContainsKey(streamId))
 				{
+					result.Dispose();
 					return null; // already created in a concurrent thread
 				}
 				var updated = capture.SetItem(streamId, result);
@@ -434,6 +418,18 @@ namespace Yllibed.StreamMultiplexer.Core
 		public void Dispose()
 		{
 			_cts.Cancel(false);
+
+			foreach (var request in _requests.Values)
+			{
+				request.TrySetCanceled();
+			}
+
+			foreach (var stream in _streams.Values)
+			{
+				stream.Dispose();
+			}
+
+			_lowLevelStream.Dispose();
 		}
 	}
 }
