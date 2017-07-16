@@ -201,6 +201,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		[TestMethod]
+		[Ignore]
 		public async Task TestTransmitBigStream()
 		{
 			(_, _, _, _, var subStreamA, var subStreamB) = await GetSubStreamsPair();
