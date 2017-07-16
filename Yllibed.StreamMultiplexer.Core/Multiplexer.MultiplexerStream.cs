@@ -63,7 +63,7 @@ namespace Yllibed.StreamMultiplexer.Core
 				{
 					throw new ArgumentNullException(nameof(buffer));
 				}
-				if (buffer.GetLowerBound(0) != 0 || buffer.Length < offset + count)
+				if (buffer.Length < offset + count)
 				{
 					throw new ArgumentException(nameof(buffer));
 				}
@@ -198,7 +198,7 @@ namespace Yllibed.StreamMultiplexer.Core
 				{
 					throw new ArgumentNullException(nameof(buffer));
 				}
-				if (buffer.GetLowerBound(0) != 0 || buffer.Length < offset + count)
+				if (buffer.Length < offset + count)
 				{
 					throw new ArgumentException(nameof(buffer));
 				}
