@@ -131,23 +131,24 @@ namespace Yllibed.StreamMultiplexer.Core
 
 		private bool _initialized = false;
 
-		private void ReadStartingBlock()
+		private async void ReadStartingBlock()
 		{
+			var ackBytesLength = _ackBytes.Length;
+
 			// Send starting block to other side
-			var t1 = _lowLevelStream.WriteAsync(_ackBytes, 0, _ackBytes.Length, _ct);
+			var t1 = _lowLevelStream.WriteAsync(_ackBytes, 0, ackBytesLength, _ct);
 
 			// Read incoming starting block
-			foreach (var expected in _ackBytes)
+			var buffer = new byte[ackBytesLength];
+			var read = await _lowLevelStream.ReadAsync(buffer, 0, ackBytesLength, _ct);
+
+			if (read != ackBytesLength || !buffer.SequenceEqual(_ackBytes))
 			{
-				var read = _lowLevelStream.ReadByte();
-				if (read != expected)
-				{
-					Dispose(); // end of stream or invalid byte
-					return;
-				}
+				Dispose();
+				return;
 			}
 
-			t1.Wait(_ct);
+			await t1;
 			_lowLevelStream.WriteByte(0x01);
 
 			var version = _lowLevelStream.ReadByte();
