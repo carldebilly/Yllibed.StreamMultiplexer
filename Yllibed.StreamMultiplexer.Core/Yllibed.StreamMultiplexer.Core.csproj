@@ -15,6 +15,7 @@
 			a proprietary protocol designed to tunnel substreams into a main one. It is optimized
 			to transit on TCP "NetworkStream", but any stream should work.
 		</Description>
+		<PackageId>Yllibed.StreamMultiplexer</PackageId>
 	</PropertyGroup>
 
 
