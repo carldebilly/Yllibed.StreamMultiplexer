@@ -330,32 +330,33 @@ namespace Yllibed.StreamMultiplexer.Core
 			return result;
 		}
 
-		private async Task SendPacket(ushort streamId, MultiplexerPacketType packetType, params IEnumerable<byte>[] payloads)
+		private byte[] _packetBuffer = new byte[1412];
+
+		private async Task SendPacket(ushort streamId, MultiplexerPacketType packetType, params byte[][] payloads)
 		{
 			while (!_initialized)
 			{
 				await Task.Delay(10, _ct);
 			}
 
-			byte[] payload =
-				payloads.Length == 0
-					? null
-					: payloads.Length == 1
-						? payloads[0].ToArray()
-						: payloads.SelectMany(x => x).ToArray();
-
-			// TODO: memory-mapped struct instead of this, to prevent fragmentation on network
-			var streamIdBytes = BitConverter.GetBytes(streamId);
-			_lowLevelStream.Write(streamIdBytes, 0, 2); // 0-1
-			_lowLevelStream.WriteByte((byte) packetType); // 2
-			_lowLevelStream.WriteByte(0x00); // 3
-			var packetLength = (ushort) (payload?.Length ?? 0);
-			_lowLevelStream.Write(BitConverter.GetBytes(packetLength), 0, 2); // 4-5
-			if (payload != null)
+			var payloadLength = 0;
+			foreach (var payload in payloads)
 			{
-				_lowLevelStream.Write(payload, 0, payload.Length);
+				Array.Copy(payload, 0, _packetBuffer, payloadLength + 6, payload.Length);
+				payloadLength += payload.Length;
 			}
 
+			var header =
+				new PacketHeader
+				{
+					StreamId = streamId,
+					Type = packetType,
+					Length = (ushort) payloadLength
+				};
+
+			_packetBuffer.WriteStructToBuffer(header);
+
+			await _lowLevelStream.WriteAsync(_packetBuffer, 0, payloadLength + 6, _ct);
 			await _lowLevelStream.FlushAsync(_ct);
 		}
 
@@ -370,7 +371,7 @@ namespace Yllibed.StreamMultiplexer.Core
 				streamId,
 				MultiplexerPacketType.REQ,
 				BitConverter.GetBytes(windowSize),
-				_Utf8.GetBytes(name.Take(1024).ToArray()).Take(1404));
+				_Utf8.GetBytes(name.Take(1024).ToArray()).Take(1404).ToArray());
 		}
 
 		private Task SendACK(ushort streamId, ushort windowSize)
@@ -430,6 +431,15 @@ namespace Yllibed.StreamMultiplexer.Core
 			}
 
 			_lowLevelStream.Dispose();
+		}
+
+		[StructLayout(LayoutKind.Sequential, Pack = 1, Size=6)]
+		private struct PacketHeader
+		{
+			internal ushort StreamId;
+			internal MultiplexerPacketType Type;
+			internal byte Reserved;
+			internal ushort Length;
 		}
 	}
 }
