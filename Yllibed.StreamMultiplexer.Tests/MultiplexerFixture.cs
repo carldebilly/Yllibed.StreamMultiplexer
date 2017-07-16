@@ -1,5 +1,4 @@
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
@@ -64,9 +63,67 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		[TestMethod]
+		public async Task MultiplexerTestNonLatinStreamNames()
+		{
+			(_, _, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
+
+			const string streamName = "👣👨‍👨‍👧🎂";
+
+			Stream output = null;
+
+			void OnMultiplexerBOnRequestedStream(object snd, StreamRequestEventArgs evt)
+			{
+				if (evt.Name == streamName)
+				{
+					evt.GetStream(out output);
+				}
+			}
+
+			multiplexerB.RequestedStream += OnMultiplexerBOnRequestedStream;
+
+			var s = await multiplexerA.RequestStream(_ct, streamName);
+
+			s.Should().NotBeNull();
+			output.Should().NotBeNull();
+		}
+
+		[TestMethod]
+		public async Task MultiplexerTestRejectedStreamRequests()
+		{
+			(_, _, var multiplexerA, var multiplexerB, _, _) = await GetSubStreamsPair();
+
+			for (var i = 0; i < 100; i++)
+			{
+				var stream = await multiplexerA.RequestStream(_ct, "streamA" + 1);
+				stream.Should().BeNull();
+			}
+
+			for (var i = 0; i < 100; i++)
+			{
+				var stream = await multiplexerB.RequestStream(_ct, "streamB" + 1);
+				stream.Should().BeNull();
+			}
+		}
+
+		[TestMethod]
+		[Ignore]
+		public async Task MultiplexerTestStreamIdReusage()
+		{
+			(_, _, var multiplexerA, var multiplexerB, _, _) = await GetSubStreamsPair();
+
+			multiplexerB.RequestedStream += (snd, evt) => evt.GetStream(out _);
+
+			for (var i = 0; i < ushort.MaxValue + 100; i++)
+			{
+				var stream = await multiplexerA.RequestStream(_ct, "x-stream");
+				stream.Should().NotBeNull();
+			}
+		}
+
+		[TestMethod]
 		public async Task MultiplexerTestMultipleStreams()
 		{
-			(var streamA, var streamB, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
+			(_, _, var multiplexerA, var multiplexerB, _, _) = await GetSubStreamsPair();
 
 			var aStreams = ImmutableDictionary<string, Stream>.Empty;
 			var bStreams = ImmutableDictionary<string, Stream>.Empty;
@@ -121,7 +178,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 		[TestMethod]
 		public async Task TestStreamWindowSize()
 		{
-			(var streamA, var streamB, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
+			(_, _, _, _, var subStreamA, var subStreamB) = await GetSubStreamsPair();
 
 			subStreamB.WriteByte(1);
 			await subStreamB.FlushAsync(_ct); // available window size reduced to 1
@@ -146,11 +203,11 @@ namespace Yllibed.StreamMultiplexer.Tests
 		[TestMethod]
 		public async Task TestTransmitBigStream()
 		{
-			(var streamA, var streamB, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
+			(_, _, _, _, var subStreamA, var subStreamB) = await GetSubStreamsPair();
 
 			var bigStream = new MemoryStream();
 
-			const int length = 1 * 1024 * 1024; // 1MB
+			const int length = 1 * 1024 * 1024 + 3000000;
 
 			long sum = 0;
 			for(var i = 0;i < length; i++)
@@ -178,13 +235,15 @@ namespace Yllibed.StreamMultiplexer.Tests
 				await Task.Yield();
 			}
 
+			copyTask.IsCompleted.Should().BeTrue();
+
 			readSum.Should().Be(sum);
 		}
 
 		[TestMethod]
 		public async Task TestTransmitAndClose()
 		{
-			(var streamA, var streamB, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
+			(_, _, _, _, var subStreamA, var subStreamB) = await GetSubStreamsPair();
 
 			async Task WriteToStream()
 			{
@@ -223,7 +282,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 		[TestMethod]
 		public async Task TestTransmitWithoutFlushingAndClose()
 		{
-			(var streamA, var streamB, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
+			(_, _, _, _, var subStreamA, var subStreamB) = await GetSubStreamsPair();
 
 			async Task WriteToStream()
 			{
