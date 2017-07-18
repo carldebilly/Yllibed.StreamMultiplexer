@@ -153,7 +153,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 				{
 					if (evt.GetStream(out var stream))
 					{
-						Transactional.SetItem(ref aStreams, evt.Name, stream);
+						ImmutableInterlocked.TryAdd(ref aStreams, evt.Name, stream);
 					}
 				};
 
@@ -167,7 +167,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 					var s = await multiplexerB.RequestStream(_ct, name);
 					if (s != null)
 					{
-						Transactional.SetItem(ref bStreams, name, s);
+						ImmutableInterlocked.TryAdd(ref bStreams, name, s);
 						break;
 					}
 				}
