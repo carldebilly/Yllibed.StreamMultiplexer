@@ -88,14 +88,18 @@ namespace Yllibed.StreamMultiplexer.Core
 					await SendREQ(streamId, _windowSize, name);
 					(var result, var resultData) = await tcs.Task;
 
-					Transactional.Remove(ref _requests, streamId);
+					ImmutableInterlocked.TryRemove(ref _requests, streamId, out _);
 
 					if (result == MultiplexerPacketType.ACK)
 					{
 						stream = new MultiplexerStream(this, streamId, resultData);
 
 						// Register the new stream into
-						Transactional.SetItem(ref _streams, streamId, stream);
+						if (!ImmutableInterlocked.TryAdd(ref _streams, streamId, stream))
+						{
+							stream.Dispose(); // Another stream already registered on this stream id (weird)
+							return null;
+						}
 					}
 					else if (result == MultiplexerPacketType.NAK)
 					{
