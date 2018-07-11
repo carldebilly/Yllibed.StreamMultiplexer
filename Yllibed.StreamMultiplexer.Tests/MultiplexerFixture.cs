@@ -106,7 +106,6 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		[TestMethod]
-		[Ignore]
 		public async Task MultiplexerTestNestedMultiplexer()
 		{
 			(_, _, _, _, var streamA, var streamB) = await GetSubStreamsPair();
@@ -117,27 +116,10 @@ namespace Yllibed.StreamMultiplexer.Tests
 			multiplexerA.RequestedStream += (snd, evt) => evt.GetStream(out _);
 
 			multiplexerA.Start();
-			await Task.Yield();
 			multiplexerB.Start();
-			await Task.Yield();
 
 			var s = await multiplexerB.RequestStream(_ct, "123");
 			s.Should().NotBeNull();
-		}
-
-		[TestMethod]
-		[Ignore]
-		public async Task MultiplexerTestStreamIdReusage()
-		{
-			(_, _, var multiplexerA, var multiplexerB, _, _) = await GetSubStreamsPair();
-
-			multiplexerB.RequestedStream += (snd, evt) => evt.GetStream(out _);
-
-			for (var i = 0; i < ushort.MaxValue + 100; i++)
-			{
-				var stream = await multiplexerA.RequestStream(_ct, "x-stream");
-				stream.Should().NotBeNull();
-			}
 		}
 
 		[TestMethod]
@@ -221,7 +203,6 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		[TestMethod]
-		[Ignore]
 		public async Task TestTransmitBigStream()
 		{
 			(_, _, _, _, var subStreamA, var subStreamB) = await GetSubStreamsPair();
