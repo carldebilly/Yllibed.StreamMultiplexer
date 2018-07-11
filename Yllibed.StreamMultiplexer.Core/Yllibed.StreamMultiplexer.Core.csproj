@@ -24,7 +24,7 @@
 		<NugetTargetMoniker>UAP,Version=v10.0</NugetTargetMoniker>
 		<TargetPlatformIdentifier>UAP</TargetPlatformIdentifier>
 		<TargetPlatformVersion>10.0.15063.0</TargetPlatformVersion>
-		<TargetPlatformMinVersion>10.0.14393.0</TargetPlatformMinVersion>
+		<TargetPlatformMinVersion>10.0.15063.0</TargetPlatformMinVersion>
 		<TargetFrameworkIdentifier>.NETCore</TargetFrameworkIdentifier>
 		<TargetFrameworkVersion>v5.0</TargetFrameworkVersion>
 		<DefineConstants>$(DefineConstants);NETFX_CORE;WINDOWS_UWP</DefineConstants>
@@ -37,12 +37,12 @@
 	</PropertyGroup>
 
 	<ItemGroup Condition=" '$(TargetFramework)' == 'uap10.0' ">
-		<PackageReference Include="Microsoft.NETCore.UniversalWindowsPlatform" Version="5.3.3" />
+		<PackageReference Include="Microsoft.NETCore.UniversalWindowsPlatform" Version="6.1.5" />
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="System.Collections.Immutable" Version="1.3.1" />
-	  <PackageReference Include="System.ValueTuple" Version="4.3.1" />
+	  <PackageReference Include="System.Collections.Immutable" Version="1.5.0" />
+	  <PackageReference Include="System.ValueTuple" Version="4.5.0" />
 	</ItemGroup>
 
 </Project>

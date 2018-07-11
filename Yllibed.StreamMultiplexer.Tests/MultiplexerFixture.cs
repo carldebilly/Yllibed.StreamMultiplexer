@@ -52,14 +52,14 @@ namespace Yllibed.StreamMultiplexer.Tests
 			await subStreamB.FlushAsync(_ct);
 
 			var readFromA = await readATask;
-			readFromA.ShouldBeEquivalentTo(10);
-			bufferA.ShouldAllBeEquivalentTo(bufferB);
+			readFromA.Should().Be(10);
+			bufferA.Should().BeEquivalentTo(bufferB);
 
 			subStreamB.Dispose();
-			multiplexerB.NumberOfActiveStreams.ShouldBeEquivalentTo(0);
+			multiplexerB.NumberOfActiveStreams.Should().Be(0);
 
-			subStreamA.ReadByte().ShouldBeEquivalentTo(-1);
-			multiplexerA.NumberOfActiveStreams.ShouldBeEquivalentTo(0);
+			subStreamA.ReadByte().Should().Be(-1);
+			multiplexerA.NumberOfActiveStreams.Should().Be(0);
 		}
 
 		[TestMethod]
@@ -289,15 +289,15 @@ namespace Yllibed.StreamMultiplexer.Tests
 
 				var buffer = new byte[j + 1];
 				var read = await subStreamA.ReadAsync(buffer, 0, buffer.Length, _ct);
-				read.ShouldBeEquivalentTo(buffer.Length);
-				buffer.ShouldAllBeEquivalentTo(j);
+				read.Should().Be(buffer.Length);
+				buffer.Should().AllBeEquivalentTo(j);
 			}
 
 			writeTask.IsCompleted.Should().BeTrue();
 
 			var b = new byte[1];
 			var r = await subStreamA.ReadAsync(b, 0, 1, _ct);
-			r.ShouldBeEquivalentTo(0);
+			r.Should().Be(0);
 		}
 
 		[TestMethod]
@@ -327,15 +327,15 @@ namespace Yllibed.StreamMultiplexer.Tests
 
 				var buffer = new byte[j + 1];
 				var read = await subStreamA.ReadAsync(buffer, 0, buffer.Length, _ct);
-				read.ShouldBeEquivalentTo(buffer.Length);
-				buffer.ShouldAllBeEquivalentTo(j);
+				read.Should().Be(buffer.Length);
+				buffer.Should().AllBeEquivalentTo(j);
 			}
 
 			writeTask.IsCompleted.Should().BeTrue();
 
 			var b = new byte[1];
 			var r = await subStreamA.ReadAsync(b, 0, 1, _ct);
-			r.ShouldBeEquivalentTo(0);
+			r.Should().Be(0);
 		}
 
 		// *** PRIVATE STUFF ***
@@ -385,8 +385,8 @@ namespace Yllibed.StreamMultiplexer.Tests
 
 			var subStreamB = await multiplexerB.RequestStream(_ct, "channel1") as Multiplexer.MultiplexerStream;
 
-			multiplexerA.NumberOfActiveStreams.ShouldBeEquivalentTo(1);
-			multiplexerB.NumberOfActiveStreams.ShouldBeEquivalentTo(1);
+			multiplexerA.NumberOfActiveStreams.Should().Be(1);
+			multiplexerB.NumberOfActiveStreams.Should().Be(1);
 
 			subStreamA.Should().NotBeNull();
 			subStreamB.Should().NotBeNull();
