@@ -141,6 +141,7 @@ namespace Yllibed.StreamMultiplexer.Core
 
 			// Send starting block to other side
 			var t1 = _lowLevelStream.WriteAsync(_ackBytes, 0, ackBytesLength, _ct);
+			await _lowLevelStream.FlushAsync(_ct);
 
 			// Read incoming starting block
 			var buffer = new byte[ackBytesLength];
@@ -154,6 +155,7 @@ namespace Yllibed.StreamMultiplexer.Core
 
 			await t1;
 			_lowLevelStream.WriteByte(0x01);
+			await _lowLevelStream.FlushAsync(_ct);
 
 			var version = _lowLevelStream.ReadByte();
 			if (version != 1)
