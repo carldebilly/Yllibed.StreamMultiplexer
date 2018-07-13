@@ -6,6 +6,12 @@ into the main stream (called _low-level stream_).
 > This protocol is in no way part of any standard and has been designed by Carl de Billy in July 2017.
 > The name _Yllibed_ is from his last name, once reversed.
 
+## Installing
+
+Get it on Nuget:
+
+[![NuGet](https://buildstats.info/nuget/Yllibed.StreamMultiplexer?includePreReleases=false)](https://www.nuget.org/packages/Yllibed.StreamMultiplexer/)
+
 ## Features
  * **Peers are equals**: There is no "server" or "client" side of the connection. We just call them `Peers`.
  * **Bi-directional streams**: Each peer can _ask_ for a stream to the other peer. Useful for _NAT Traversal_
