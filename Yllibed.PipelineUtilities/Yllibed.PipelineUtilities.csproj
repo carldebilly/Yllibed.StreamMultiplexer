@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>net46;netstandard1.4;netstandard2.0;netcoreapp2.1</TargetFrameworks>
+
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+		<PackageProjectUrl>https://github.com/carldebilly/Yllibed.StreamMultiplexer</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/carldebilly/Yllibed.StreamMultiplexer</RepositoryUrl>
+		<RepositoryType>github</RepositoryType>
+		<PackageTags>stream</PackageTags>
+		<Authors>Carl de Billy</Authors>
+		<Company />
+		<Product>Yllibed Pipelines Utilities</Product>
+		<Description>
+			Types:
+				* PipelinesToStreamAdapter
+				* StreamToDuplexPipeAdapter
+
+			Series of utilities to adapt System.IO.Pipelines to streams for code migration
+			and compatibility.
+		</Description>
+		<PackageId>Yllibed.PipelineUtilities</PackageId>
+
+		<ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+		<Deterministic>true</Deterministic>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="System.IO.Pipelines" Version="4.5.0" />
+	</ItemGroup>
+
+
+</Project>

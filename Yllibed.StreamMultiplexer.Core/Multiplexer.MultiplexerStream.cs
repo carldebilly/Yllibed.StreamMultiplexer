@@ -52,9 +52,12 @@ namespace Yllibed.StreamMultiplexer.Core
 
 			public override int Read(byte[] buffer, int offset, int count)
 			{
-				var t = ReadAsync(buffer, offset, count, CancellationToken.None);
-				t.Wait();
-				return t.Result;
+				async Task<int> InnerRead()
+				{
+					await Task.Yield();
+					return await ReadAsync(buffer, offset, count, CancellationToken.None);
+				}
+				return InnerRead().Result;
 			}
 
 			public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken ct)

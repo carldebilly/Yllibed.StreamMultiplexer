@@ -2,6 +2,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Pipelines;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -10,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Yllibed.PipelineUtilities;
 using Yllibed.StreamMultiplexer.Core;
 
 namespace Yllibed.StreamMultiplexer.Tests
@@ -36,6 +38,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		[TestMethod]
+		[Timeout(5000)]
 		public async Task MultiplexerSanityTest()
 		{
 			(_, _, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
@@ -58,11 +61,14 @@ namespace Yllibed.StreamMultiplexer.Tests
 			subStreamB.Dispose();
 			multiplexerB.NumberOfActiveStreams.Should().Be(0);
 
+			await Task.Yield();
+
 			subStreamA.ReadByte().Should().Be(-1);
 			multiplexerA.NumberOfActiveStreams.Should().Be(0);
 		}
 
 		[TestMethod]
+		[Timeout(5000)]
 		public async Task MultiplexerTestNonLatinStreamNames()
 		{
 			(_, _, var multiplexerA, var multiplexerB, var subStreamA, var subStreamB) = await GetSubStreamsPair();
@@ -88,6 +94,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		[TestMethod]
+		[Timeout(5000)]
 		public async Task MultiplexerTestRejectedStreamRequests()
 		{
 			(_, _, var multiplexerA, var multiplexerB, _, _) = await GetSubStreamsPair();
@@ -106,6 +113,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		[TestMethod]
+		[Timeout(5000)]
 		public async Task MultiplexerTestNestedMultiplexer()
 		{
 			(_, _, _, _, var streamA, var streamB) = await GetSubStreamsPair();
@@ -123,6 +131,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		[TestMethod]
+		[Timeout(5000)]
 		public async Task MultiplexerTestMultipleStreams()
 		{
 			(_, _, var multiplexerA, var multiplexerB, _, _) = await GetSubStreamsPair();
@@ -178,6 +187,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		[TestMethod]
+		[Timeout(5000)]
 		public async Task TestStreamWindowSize()
 		{
 			(_, _, _, _, var subStreamA, var subStreamB) = await GetSubStreamsPair();
@@ -203,6 +213,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		[TestMethod]
+		[Timeout(15000)]
 		public async Task TestTransmitBigStream()
 		{
 			(_, _, _, _, var subStreamA, var subStreamB) = await GetSubStreamsPair();
@@ -243,6 +254,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		[TestMethod]
+		[Timeout(5000)]
 		public async Task TestTransmitAndClose()
 		{
 			(_, _, _, _, var subStreamA, var subStreamB) = await GetSubStreamsPair();
@@ -282,6 +294,7 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		[TestMethod]
+		[Timeout(5000)]
 		public async Task TestTransmitWithoutFlushingAndClose()
 		{
 			(_, _, _, _, var subStreamA, var subStreamB) = await GetSubStreamsPair();
@@ -320,14 +333,14 @@ namespace Yllibed.StreamMultiplexer.Tests
 		}
 
 		// *** PRIVATE STUFF ***
-		private async Task<(NetworkStream streamA, NetworkStream streamB)> GetStreamsPair()
+		private async Task<(Stream streamA, Stream streamB)> GetStreamsPair()
 		{
 			var tcpServer = new TcpListener(IPAddress.IPv6Loopback, 0);
 			tcpServer.Start();
 			var serverEndpoint = (IPEndPoint)tcpServer.LocalEndpoint;
 
 			var clientATask = tcpServer.AcceptTcpClientAsync();
-			
+
 			var clientB = new TcpClient(AddressFamily.InterNetworkV6);
 			await clientB.ConnectAsync(serverEndpoint.Address, serverEndpoint.Port);
 
@@ -336,10 +349,26 @@ namespace Yllibed.StreamMultiplexer.Tests
 			clientA.Connected.Should().BeTrue("A not connected.");
 			clientB.Connected.Should().BeTrue("B not connected.");
 
-			return (clientA.GetStream(), clientB.GetStream());
+			var innerStreamA = clientA.GetStream();
+			var innerStreamB = clientB.GetStream();
+
+			var decoratorA = new StreamToDuplexPipeAdapter(innerStreamA);
+			var decoratorB = new StreamToDuplexPipeAdapter(innerStreamB);
+
+			//return (clientA.GetStream(), clientB.GetStream());
+
+			//var options = new PipeOptions(useSynchronizationContext: true);
+
+			//var pipe1 = new Pipe(options);
+			//var pipe2 = new Pipe(options);
+
+			var streamA = new PipelinesToStreamAdapter(decoratorA.Input, decoratorA.Output);
+			var streamB = new PipelinesToStreamAdapter(decoratorB.Input, decoratorB.Output);
+
+			return (streamA, streamB);
 		}
 
-		private async Task<(NetworkStream streamA, NetworkStream streamB, Multiplexer multiplexerA, Multiplexer multiplexerB, Multiplexer.MultiplexerStream subStreamA, Multiplexer.MultiplexerStream subStreamB)> GetSubStreamsPair()
+		private async Task<(Stream streamA, Stream streamB, Multiplexer multiplexerA, Multiplexer multiplexerB, Multiplexer.MultiplexerStream subStreamA, Multiplexer.MultiplexerStream subStreamB)> GetSubStreamsPair()
 		{
 			(var streamA, var streamB) = await GetStreamsPair();
 
